@@ -1,4 +1,4 @@
-# PLC-DPO
+# PLC-DPO: Posterior Label Correction in Noisy and Ambiguous Preference Optimization
 
 Official code repository for **PLC-DPO**, accepted to **Findings of EMNLP 2026**.
 
