@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plcdpo"
+version = "0.1.0"
+description = "Posterior Label Correction for Direct Preference Optimization"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{name = "Boryeong Cho"}, {name = "Sumyeong Ahn"}, {name = "Se-Young Yun"}]
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+data = ["datasets==4.3.0", "pandas>=2.2", "pyarrow>=21"]
+
+[project.urls]
+Repository = "https://github.com/VennTum99/PLC-DPO"
+Paper = "https://arxiv.org/abs/2608.30597"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

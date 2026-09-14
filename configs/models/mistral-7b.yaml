@@ -1,0 +1,30 @@
+model_name_or_path: alignment-handbook/zephyr-7b-sft-full
+torch_dtype: bfloat16
+attn_implementation: flash_attention_2
+load_in_4bit: false
+lora_target_modules:
+- q_proj
+- k_proj
+- v_proj
+- o_proj
+- gate_proj
+- up_proj
+- down_proj
+chat_template: '{% for message in messages %}{% if message[''role''] == ''user'' %}{{
+  ''<|user|>
+
+  '' + message[''content''] + ''</s>
+
+  '' }}{% elif message[''role''] == ''assistant'' %}{{ ''<|assistant|>
+
+  '' + message[''content''] + ''</s>
+
+  '' }}{% elif message[''role''] == ''system'' %}{{ ''<|system|>
+
+  '' + message[''content''] + ''</s>
+
+  '' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ ''<|assistant|>
+
+  '' }}{% endif %}'
+max_length: 1024
+max_prompt_length: 512

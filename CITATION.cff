@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you find this repository useful for your research, we would appreciate it if you could cite our work."
+type: software
+title: "PLC-DPO: Posterior Label Correction in Noisy and Ambiguous Preference Optimization"
+authors:
+  - family-names: Cho
+    given-names: Boryeong
+  - family-names: Ahn
+    given-names: Sumyeong
+  - family-names: Yun
+    given-names: Se-Young
+license: Apache-2.0
+repository-code: "https://github.com/VennTum99/PLC-DPO"
+preferred-citation:
+  type: article
+  title: "PLC-DPO: Posterior Label Correction in Noisy and Ambiguous Preference Optimization"
+  authors:
+    - family-names: Cho
+      given-names: Boryeong
+    - family-names: Ahn
+      given-names: Sumyeong
+    - family-names: Yun
+      given-names: Se-Young
+  year: 2026
+  journal: "arXiv preprint arXiv:2608.30597"
+  url: "https://arxiv.org/abs/2608.30597"

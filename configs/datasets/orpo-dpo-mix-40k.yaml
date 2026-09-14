@@ -1,0 +1,5 @@
+dataset_mixer:
+  data/orpo-dpo-mix-40k/train.parquet: 1.0
+dataset_splits:
+- train
+csv_path: data/orpo-dpo-mix-40k/order_seed42.csv

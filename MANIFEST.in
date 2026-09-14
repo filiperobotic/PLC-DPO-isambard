@@ -1,0 +1,5 @@
+include README.md LICENSE CITATION.cff
+recursive-include configs *.yaml
+recursive-include requirements *.txt
+recursive-include scripts *.sh
+recursive-include assets *.png

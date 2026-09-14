@@ -1,0 +1,17 @@
+# Recorded training environment: paper Appendix D.7 and the July 10 pip freeze.
+# Install torch 2.10.0 from the cu128 index first (see README).
+torch==2.10.0
+transformers==5.2.0
+peft==0.18.1
+trl==0.24.0
+accelerate==1.13.0
+datasets==4.3.0
+bitsandbytes==0.49.2
+huggingface-hub==1.7.1
+numpy==2.4.4
+pandas==3.0.3
+PyYAML==6.0.3
+xformers==0.0.35
+unsloth @ git+https://github.com/unslothai/unsloth.git@4192fe6ebea2a89fde4daf410577ff30bab54bdd
+unsloth_zoo @ git+https://github.com/unslothai/unsloth-zoo.git@6650aa6f80d393ab67a9d24ba8a6c371542192a1
+torchao==0.13.0

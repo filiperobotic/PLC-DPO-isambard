@@ -1,0 +1,22 @@
+model_name_or_path: glorgao/Qwen2.5-7B-SFT
+torch_dtype: bfloat16
+attn_implementation: flash_attention_2
+load_in_4bit: false
+lora_target_modules:
+- q_proj
+- k_proj
+- v_proj
+- o_proj
+- gate_proj
+- up_proj
+- down_proj
+chat_template: '{% for message in messages %}{{''<|im_start|>'' + message[''role'']
+  + ''
+
+  '' + message[''content''] + ''<|im_end|>'' + ''
+
+  ''}}{% endfor %}{% if add_generation_prompt %}{{ ''<|im_start|>assistant
+
+  '' }}{% endif %}'
+max_length: 1024
+max_prompt_length: 512

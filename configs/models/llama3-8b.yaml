@@ -1,0 +1,24 @@
+model_name_or_path: princeton-nlp/Llama-3-Base-8B-SFT
+torch_dtype: bfloat16
+attn_implementation: flash_attention_2
+load_in_4bit: false
+lora_target_modules:
+- q_proj
+- k_proj
+- v_proj
+- o_proj
+- gate_proj
+- up_proj
+- down_proj
+chat_template: '{% set loop_messages = messages %}{% for message in loop_messages
+  %}{% set content = ''<|start_header_id|>'' + message[''role''] + ''<|end_header_id|>
+
+
+  '' + message[''content''] | trim + ''<|eot_id|>'' %}{% if loop.index0 == 0 %}{%
+  set content = bos_token + content %}{% endif %}{{ content }}{% endfor %}{% if add_generation_prompt
+  %}{{ ''<|start_header_id|>assistant<|end_header_id|>
+
+
+  '' }}{% endif %}'
+max_length: 1024
+max_prompt_length: 512

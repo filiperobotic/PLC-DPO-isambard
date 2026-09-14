@@ -1,0 +1,5 @@
+dataset_mixer:
+  data/ultrafeedback-binarized/train.parquet: 1.0
+dataset_splits:
+- train
+csv_path: data/ultrafeedback-binarized/order_seed42.csv
