@@ -6,7 +6,9 @@ cd "$(dirname "$0")/.." && source isambard/env.sh
 export HF_HUB_OFFLINE=0
 HF="run_in_sif hf"   # huggingface-hub >= 1.0: the CLI is `hf` (huggingface-cli is deprecated)
 $HF download AIR-hl/Qwen2.5-1.5B-ultrachat200k
-$HF download glorgao/Qwen2.5-7B-SFT
+# glorgao/Qwen2.5-7B-SFT (paper's Qwen 7B SFT) is no longer on the Hub (Oct 2026): main 7-8B model = Llama-3-8B,
+# whose SFT checkpoint (SimPO's, UltraChat-200k) is public and is what configs/models/llama3-8b.yaml points to.
+$HF download princeton-nlp/Llama-3-Base-8B-SFT
 $HF download Skywork/Skywork-Reward-V2-Llama-3.1-8B
 $HF download --repo-type dataset HuggingFaceH4/ultrafeedback_binarized
 $HF download --repo-type dataset Anthropic/hh-rlhf

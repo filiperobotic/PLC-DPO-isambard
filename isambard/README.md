@@ -24,9 +24,10 @@ Expected at the end of `plc-smoke-<jobid>.out`: an adapter in `$OUT/smoke/qwen1.
 and `self-winrate.json` with `win_rate: 50.0`, then `SMOKE OK`.
 
 ## Training runs (1 GPU each; queue several)
+Main 7-8B model: Llama-3-8B (`princeton-nlp/Llama-3-Base-8B-SFT`); the paper's `glorgao/Qwen2.5-7B-SFT` is gone from the Hub.
 ```bash
 for S in 42 43 44; do for M in dpo plc-dpo-aggressive; do
-  sbatch --export=ALL,MODEL=qwen2.5-7b,DATA=ultrafeedback-binarized,METHOD=$M,SEED=$S isambard/jobs/train.sbatch
+  sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,METHOD=$M,SEED=$S isambard/jobs/train.sbatch
 done; done
 ```
 Storage: code + `data/` in `$HOME` (quota 100 GB; parquet files are small), HF cache + images in `$PROJECTDIR/$USER`,
