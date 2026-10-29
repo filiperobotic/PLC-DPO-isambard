@@ -1,0 +1,26 @@
+# Apptainer image for Isambard-AI (aarch64, GH200). Build on a login node:
+#   apptainer build --fakeroot $PROJECTDIR/$USER/sif/plcdpo-train.sif isambard/plcdpo-train.def
+# Base: NVIDIA PyTorch NGC container (multi-arch, CUDA + torch already built for ARM).
+# No Unsloth / flash-attn / xformers / bitsandbytes: the repo runs with PLCDPO_NO_UNSLOTH=1 (sdpa attention).
+Bootstrap: docker
+# If this tag is not found, pick the newest linux/arm64 tag at https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch
+From: nvcr.io/nvidia/pytorch:25.09-py3
+
+%post
+    python -m pip install --no-cache-dir --upgrade pip
+    python -m pip install --no-cache-dir \
+        "transformers==5.2.0" "peft==0.18.1" "trl==0.24.0" "accelerate==1.13.0" \
+        "datasets==4.3.0" "huggingface-hub==1.7.1" "pandas>=2.2" "PyYAML==6.0.3" "pyarrow" "tqdm"
+    python -m pip check || true
+    python - <<'PY'
+import torch, transformers, trl, peft, datasets, platform
+print("arch", platform.machine(), "torch", torch.__version__, "cuda", torch.version.cuda,
+      "transformers", transformers.__version__, "trl", trl.__version__, "peft", peft.__version__, "datasets", datasets.__version__)
+PY
+
+%environment
+    export TOKENIZERS_PARALLELISM=false
+    export PYTHONUNBUFFERED=1
+
+%labels
+    purpose "PLC-DPO replication on Isambard-AI (train + HF-generate + reward scoring)"

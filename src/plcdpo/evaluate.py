@@ -63,8 +63,9 @@ def generate(args) -> None:
     # Dense BF16 evaluation does not require optional FP8 kernels.
     os.environ.setdefault("VLLM_USE_DEEP_GEMM", "0")
     os.environ.setdefault("VLLM_MOE_USE_DEEP_GEMM", "0")
-    from vllm import LLM, SamplingParams
-    from vllm.lora.request import LoRARequest
+    if args.backend == "vllm":
+        from vllm import LLM, SamplingParams
+        from vllm.lora.request import LoRARequest
 
     rows = read_rows(args.input)
     os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
@@ -95,6 +96,12 @@ def generate(args) -> None:
         if token_id is not None and token_id != tokenizer.unk_token_id:
             stop_ids.add(token_id)
     stop_ids.discard(None)
+    if args.backend == "hf":
+        results, truncated = generate_hf(args, rows, tokenizer, prompts, sorted(stop_ids), prompt_budget)
+        write_rows(args.output, results)
+        write_metadata(args, input_sha256=sha256_file(args.input), count=len(results),
+                       truncated_prompts=truncated, prompt_truncation_side="left", backend="hf")
+        return
     llm = LLM(
         model=args.base_model,
         revision=args.model_revision,
@@ -131,6 +138,48 @@ def generate(args) -> None:
         truncated_prompts=truncated,
         prompt_truncation_side="left",
     )
+
+
+def generate_hf(args, rows, tokenizer, prompts, stop_ids, prompt_budget):
+    """Fallback without vLLM (e.g. aarch64): transformers generate, greedy when temperature == 0."""
+    import torch
+    from tqdm import tqdm
+    from transformers import AutoModelForCausalLM
+
+    torch.manual_seed(args.seed)
+    model = AutoModelForCausalLM.from_pretrained(
+        args.base_model, revision=args.model_revision, dtype=torch.bfloat16, device_map={"": 0}
+    )
+    if args.adapter:
+        from peft import PeftModel
+
+        model = PeftModel.from_pretrained(model, args.adapter).merge_and_unload()
+    model.eval()
+    tokenizer.padding_side = "left"
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    token_ids = [tokenizer.encode(p) for p in prompts]
+    truncated = sum(len(ids) > prompt_budget for ids in token_ids)
+    token_ids = [ids[-prompt_budget:] for ids in token_ids]
+    order = sorted(range(len(rows)), key=lambda i: len(token_ids[i]))
+    gen_kwargs = {"max_new_tokens": args.max_new_tokens, "eos_token_id": stop_ids, "pad_token_id": tokenizer.pad_token_id}
+    if args.temperature <= 0:
+        gen_kwargs["do_sample"] = False
+    else:
+        gen_kwargs.update({"do_sample": True, "temperature": args.temperature, "top_p": args.top_p})
+    responses = [None] * len(rows)
+    bs = args.hf_batch_size
+    for b in tqdm(range(0, len(order), bs), desc="HF generation"):
+        idx = order[b:b + bs]
+        batch = tokenizer.pad({"input_ids": [token_ids[i] for i in idx]}, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            out = model.generate(**batch, **gen_kwargs)
+        for n, i in enumerate(idx):
+            new = out[n, batch["input_ids"].shape[1]:].tolist()
+            cut = [k for k, t in enumerate(new) if t in stop_ids]
+            responses[i] = tokenizer.decode(new[:cut[0]] if cut else new, skip_special_tokens=True)
+    results = [{**row, "response": r, "model": args.adapter or args.base_model} for row, r in zip(rows, responses)]
+    return results, truncated
 
 
 def score(args) -> None:
@@ -247,6 +296,8 @@ def main() -> None:
     )
     gen.add_argument("--tensor-parallel-size", type=int, default=1)
     gen.add_argument("--gpu-memory-utilization", type=float, default=0.8)
+    gen.add_argument("--backend", choices=("vllm", "hf"), default="vllm", help="hf = transformers generate (no vLLM)")
+    gen.add_argument("--hf-batch-size", type=int, default=16)
     gen.set_defaults(function=generate)
     scoring = commands.add_parser("score")
     scoring.add_argument("--reward-model", required=True)

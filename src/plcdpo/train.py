@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import json
 from dataclasses import fields
 from pathlib import Path
@@ -44,9 +45,11 @@ def main() -> None:
 
     pin_cuda_device_to_local_rank()
     # Unsloth must patch the training stack before importing Transformers/TRL.
-    from unsloth import PatchDPOTrainer
+    # PLCDPO_NO_UNSLOTH=1 (Isambard-AI, aarch64): plain transformers + peft, no Unsloth patching.
+    if os.environ.get("PLCDPO_NO_UNSLOTH") != "1":
+        from unsloth import PatchDPOTrainer
 
-    PatchDPOTrainer()
+        PatchDPOTrainer()
 
     from .training import build_common_training_kwargs, run_training
 

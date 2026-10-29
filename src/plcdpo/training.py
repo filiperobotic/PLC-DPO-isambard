@@ -154,8 +154,15 @@ def run_training(
     configure_wandb(cfg)
     set_seed(int(cfg["seed"]))
 
-    logger.info("Loading model with Unsloth optimizations.")
-    from unsloth import FastLanguageModel
+    no_unsloth = os.environ.get("PLCDPO_NO_UNSLOTH") == "1"
+    if no_unsloth:
+        logger.info("PLCDPO_NO_UNSLOTH=1: loading with transformers + peft (no Unsloth).")
+        if str(cfg.get("optim", "")).startswith("paged_"):      # paged optimizers need bitsandbytes
+            cfg["optim"] = os.environ.get("PLCDPO_OPTIM", "adamw_torch")
+            logger.warning("optim overridden to %s (bitsandbytes unavailable).", cfg["optim"])
+    else:
+        logger.info("Loading model with Unsloth optimizations.")
+        from unsloth import FastLanguageModel
 
     device_map = get_local_rank_device_map()
     logger.warning(
@@ -165,15 +172,28 @@ def run_training(
         device_map,
         os.environ.get("CUDA_VISIBLE_DEVICES"),
     )
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=cfg["model_name_or_path"],
-        max_seq_length=cfg["max_length"],
-        dtype=getattr(torch, cfg.get("torch_dtype", "bfloat16")),
-        load_in_4bit=cfg.get("load_in_4bit", False),
-        attn_implementation=cfg.get("attn_implementation", "flash_attention_2"),
-        device_map=device_map,
-        revision=cfg.get("model_revision"),
-    )
+    if no_unsloth:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        attn = os.environ.get("PLCDPO_ATTN", "sdpa")   # flash_attention_2 requires flash-attn (not on aarch64)
+        tokenizer = AutoTokenizer.from_pretrained(cfg["model_name_or_path"], revision=cfg.get("model_revision"))
+        model = AutoModelForCausalLM.from_pretrained(
+            cfg["model_name_or_path"],
+            revision=cfg.get("model_revision"),
+            dtype=getattr(torch, cfg.get("torch_dtype", "bfloat16")),
+            attn_implementation=attn,
+            device_map=device_map if device_map is not None else {"": torch.cuda.current_device()} if torch.cuda.is_available() else None,
+        )
+    else:
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=cfg["model_name_or_path"],
+            max_seq_length=cfg["max_length"],
+            dtype=getattr(torch, cfg.get("torch_dtype", "bfloat16")),
+            load_in_4bit=cfg.get("load_in_4bit", False),
+            attn_implementation=cfg.get("attn_implementation", "flash_attention_2"),
+            device_map=device_map,
+            revision=cfg.get("model_revision"),
+        )
     model.config.use_cache = False
 
     if cfg.get("chat_template"):
@@ -182,17 +202,37 @@ def run_training(
     if tokenizer.pad_token is None and tokenizer.eos_token is not None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    logger.info("Applying LoRA through Unsloth.")
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r=cfg["lora_r"],
-        lora_alpha=cfg["lora_alpha"],
-        lora_dropout=cfg.get("lora_dropout", 0.0),
-        target_modules=cfg["lora_target_modules"],
-        bias="none",
-        use_gradient_checkpointing="unsloth" if cfg.get("gradient_checkpointing", True) else False,
-        random_state=int(cfg["seed"]),
-    )
+    if no_unsloth:
+        from peft import LoraConfig, get_peft_model
+
+        logger.info("Applying LoRA through peft (same rank/alpha/targets as the Unsloth path).")
+        if cfg.get("gradient_checkpointing", False):
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+            model.enable_input_require_grads()
+        model = get_peft_model(
+            model,
+            LoraConfig(
+                r=cfg["lora_r"],
+                lora_alpha=cfg["lora_alpha"],
+                lora_dropout=cfg.get("lora_dropout", 0.0),
+                target_modules=cfg["lora_target_modules"],
+                bias="none",
+                task_type="CAUSAL_LM",
+            ),
+        )
+        model.print_trainable_parameters()
+    else:
+        logger.info("Applying LoRA through Unsloth.")
+        model = FastLanguageModel.get_peft_model(
+            model,
+            r=cfg["lora_r"],
+            lora_alpha=cfg["lora_alpha"],
+            lora_dropout=cfg.get("lora_dropout", 0.0),
+            target_modules=cfg["lora_target_modules"],
+            bias="none",
+            use_gradient_checkpointing="unsloth" if cfg.get("gradient_checkpointing", True) else False,
+            random_state=int(cfg["seed"]),
+        )
     log_module_device_summary(model)
 
     logger.info("Loading and formatting dataset.")

@@ -1,0 +1,11 @@
+# Optional: vLLM image for fast generation (NGC vLLM container, multi-arch). If the pull fails on aarch64
+# or LoRA requests misbehave, use the training image with `evaluate.sh generate --backend hf` instead.
+Bootstrap: docker
+From: nvcr.io/nvidia/vllm:25.09-py3
+
+%post
+    python -m pip install --no-cache-dir "datasets>=4.0" "PyYAML" "pandas" "pyarrow" "tqdm"
+
+%environment
+    export TOKENIZERS_PARALLELISM=false
+    export PYTHONUNBUFFERED=1

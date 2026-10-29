@@ -1,0 +1,5 @@
+dataset_mixer:
+  data/ufb-smoke/train.parquet: 1.0
+dataset_splits:
+- train
+csv_path: data/ufb-smoke/order_seed42.csv
