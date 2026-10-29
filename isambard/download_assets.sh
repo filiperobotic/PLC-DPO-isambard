@@ -24,4 +24,5 @@ mkdir -p data/eval
 [ -f data/eval/ultrafeedback.jsonl ] || run_in_sif bash scripts/evaluate.sh prepare --dataset ultrafeedback --output data/eval/ultrafeedback.jsonl
 [ -f data/eval/hh_rlhf.jsonl ] || run_in_sif bash scripts/evaluate.sh prepare --dataset hh_rlhf --output data/eval/hh_rlhf.jsonl
 [ -f data/eval/ufb-smoke.jsonl ] || run_in_sif bash scripts/evaluate.sh prepare --dataset ultrafeedback --limit 50 --output data/eval/ufb-smoke.jsonl
+[ -f data/ultrafeedback-binarized/test.parquet ] || run_in_sif python isambard/implicit_reward.py ufb-test
 echo "assets ready under $HF_HOME and $REPO/data"

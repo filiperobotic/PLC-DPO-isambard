@@ -32,3 +32,28 @@ done; done
 ```
 Storage: code + `data/` in `$HOME` (quota 100 GB; parquet files are small), HF cache + images in `$PROJECTDIR/$USER`,
 adapters/generations in `$SCRATCHDIR/plcdpo`.
+
+## Phase 1 — UFB, Llama-3-8B (3 seeds): DPO vs PLC-DPO vs RwGap-R→DPO
+```bash
+# 1) baselines + PLC (6 independent 1-GPU tasks, as a job array)
+for S in 42 43 44; do for M in dpo plc-dpo-aggressive; do echo "llama3-8b ultrafeedback-binarized $M $S"; done; done > grid_ufb.txt
+sbatch --array=0-5 --export=ALL,GRID=grid_ufb.txt isambard/jobs/train_array.sbatch
+#    (equivalent: one `sbatch --export=ALL,MODEL=..,DATA=..,METHOD=..,SEED=.. isambard/jobs/train.sbatch` per line)
+# 2) after the 3 DPO runs: implicit-reward margins (mean of the 3 DPO) -> remove 20 % -> data/ufb-rwgap20 (+ its yaml)
+sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,NAME=ufb-rwgap20 isambard/jobs/rwgap.sbatch
+# 3) DPO on the filtered data (3 jobs); outputs land in $OUT/ufb-rwgap20/
+for S in 42 43 44; do sbatch --export=ALL,MODEL=llama3-8b,DATA=ufb-rwgap20,METHOD=dpo,SEED=$S isambard/jobs/train.sbatch; done
+# 4) generation + judge for every run on both prompt sets (job array: one task per run × set; SFT too)
+for R in $OUT/ultrafeedback-binarized/llama3-8b-*-s* $OUT/ufb-rwgap20/llama3-8b-*-s* sft; do for E in ultrafeedback hh_rlhf; do
+  echo "llama3-8b $R $E"; done; done > eval_grid.txt
+sbatch --array=0-$(( $(wc -l < eval_grid.txt) - 1 )) --export=ALL,GRID=eval_grid.txt isambard/jobs/eval_array.sbatch
+# 5) win-rates vs the DPO run of the same seed (login node, seconds); filtered runs live in another DATA dir:
+bash isambard/jobs/winrate.sh llama3-8b ultrafeedback-binarized ultrafeedback
+bash isambard/jobs/winrate.sh llama3-8b ultrafeedback-binarized hh_rlhf
+bash isambard/jobs/winrate.sh llama3-8b ufb-rwgap20 ultrafeedback ultrafeedback-binarized   # filtered runs vs the DPO baselines
+bash isambard/jobs/winrate.sh llama3-8b ufb-rwgap20 hh_rlhf ultrafeedback-binarized
+# 6) pairwise accuracy of the implicit reward on the test sets (human labels on HH; GPT-4 labels on UFB)
+sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,TEST=data/hh-rlhf/test.parquet,TAG=hh isambard/jobs/accuracy.sbatch
+sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,TEST=data/ultrafeedback-binarized/test.parquet,TAG=ufb isambard/jobs/accuracy.sbatch
+```
+Phase 2 = the same with DATA=hh-rlhf (160 k pairs; ~6-8 h per training job).
