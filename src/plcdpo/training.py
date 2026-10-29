@@ -221,6 +221,9 @@ def run_training(
             ),
         )
         model.print_trainable_parameters()
+        for m_ in (model, getattr(model, "base_model", None), getattr(getattr(model, "base_model", None), "model", None)):
+            if m_ is not None and not hasattr(m_, "warnings_issued"):
+                m_.warnings_issued = {}          # TRL 0.24 expects it; transformers 5.x no longer sets it
     else:
         logger.info("Applying LoRA through Unsloth.")
         model = FastLanguageModel.get_peft_model(
