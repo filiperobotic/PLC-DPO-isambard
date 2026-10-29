@@ -11,7 +11,8 @@ Changes to the upstream repo (all opt-in, upstream behaviour untouched):
 ## One-time setup (login node)
 ```bash
 cd ~/PLC-DPO && source isambard/env.sh
-apptainer build --fakeroot $SIF isambard/plcdpo-train.def          # ~10-20 min
+# build on a compute node: mksquashfs gets killed by the login-node limits
+srun --gpus=1 --time=01:00:00 --reservation=interactive apptainer build --fakeroot $SIF isambard/plcdpo-train.def
 hf auth login                    # Skywork-Reward-V2 is gated (or export HF_TOKEN)
 bash isambard/download_assets.sh # models, datasets, parquet files, eval prompts -> $HF_HOME and data/
 ```
