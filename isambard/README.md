@@ -44,8 +44,7 @@ sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,NAME=ufb-rwgap2
 # 3) DPO on the filtered data (3 jobs); outputs land in $OUT/ufb-rwgap20/
 for S in 42 43 44; do sbatch --export=ALL,MODEL=llama3-8b,DATA=ufb-rwgap20,METHOD=dpo,SEED=$S isambard/jobs/train.sbatch; done
 # 4) generation + judge for every run on both prompt sets (job array: one task per run × set; SFT too)
-for R in $OUT/ultrafeedback-binarized/llama3-8b-*-s* $OUT/ufb-rwgap20/llama3-8b-*-s* sft; do for E in ultrafeedback hh_rlhf; do
-  echo "llama3-8b $R $E"; done; done > eval_grid.txt
+bash isambard/jobs/make_eval_grid.sh llama3-8b ultrafeedback-binarized ufb-rwgap20 > eval_grid.txt   # only unscored pairs; needs no env.sh
 sbatch --array=0-$(( $(wc -l < eval_grid.txt) - 1 )) --export=ALL,GRID=eval_grid.txt isambard/jobs/eval_array.sbatch
 # 5) win-rates vs the DPO run of the same seed (login node, seconds); filtered runs live in another DATA dir:
 bash isambard/jobs/winrate.sh llama3-8b ultrafeedback-binarized ultrafeedback
