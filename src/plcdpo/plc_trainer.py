@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
@@ -26,6 +27,10 @@ class PLCDPOConfig(OrderedDPOConfig):
     plc_gamma_end: float = field(default=0.7)
     plc_gamma_max: float = field(default=0.7)
     plc_confidence_power: float = field(default=1.0)
+    # Isambard addition: estimate the margin std over a sliding window of the last N margins (hardware-independent)
+    # instead of the gathered micro-batch (which is a single value with per_device_batch=1 on 1 GPU -> std floor).
+    # 0 = upstream behaviour.
+    plc_std_window: int = field(default=0)
 
 
 class PLCDPOTrainer(OrderedDPOTrainer):
@@ -33,6 +38,8 @@ class PLCDPOTrainer(OrderedDPOTrainer):
         super().__init__(**kwargs)
         self.margin_mean_ema: Optional[float] = None
         self.margin_std_ema: Optional[float] = None
+        window = int(getattr(self.args, "plc_std_window", 0) or 0)
+        self._margin_window = collections.deque(maxlen=window) if window > 0 else None
 
     def _warmup_steps(self) -> int:
         explicit_steps = int(getattr(self.args, "plc_warmup_steps", 0) or 0)
@@ -59,7 +66,13 @@ class PLCDPOTrainer(OrderedDPOTrainer):
     def _update_margin_ema(self, margins: torch.Tensor) -> Tuple[float, float]:
         gathered = self.accelerator.gather_for_metrics(margins.detach()).float()
         batch_mean = float(gathered.mean().item())
-        batch_std = float(gathered.std(unbiased=False).clamp_min(float(self.args.plc_min_margin_std)).item())
+        if self._margin_window is not None:
+            self._margin_window.extend(gathered.cpu().tolist())
+            pool = torch.tensor(list(self._margin_window))
+            batch_std = float(pool.std(unbiased=False).clamp_min(float(self.args.plc_min_margin_std)).item()) if len(pool) > 1 \
+                else float(self.args.plc_min_margin_std)
+        else:
+            batch_std = float(gathered.std(unbiased=False).clamp_min(float(self.args.plc_min_margin_std)).item())
         if self.margin_mean_ema is None:
             self.margin_mean_ema = batch_mean
             self.margin_std_ema = batch_std

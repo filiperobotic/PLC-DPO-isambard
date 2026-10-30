@@ -1,0 +1,17 @@
+method: plc-dpo
+plc_length_normalize: true
+plc_ema_alpha: 0.98
+plc_min_margin_std: 0.001
+plc_source_noise: 0.1
+plc_ambiguous_prior: 0.1
+plc_direction_temperature: 0.55
+plc_tie_temperature: 1.15
+plc_loss_temperature: 1.0
+plc_tie_margin: 0.0
+plc_warmup_ratio: 0.07
+plc_gamma_start: 0.0
+plc_gamma_end: 0.85
+plc_gamma_max: 0.85
+plc_confidence_power: 0.8
+plc_recipe: aggressive-w64
+plc_std_window: 64   # std of the last 64 margins (one effective batch) instead of the 1-sample micro-batch
