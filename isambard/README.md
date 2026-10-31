@@ -51,6 +51,8 @@ bash isambard/jobs/winrate.sh llama3-8b ultrafeedback-binarized ultrafeedback
 bash isambard/jobs/winrate.sh llama3-8b ultrafeedback-binarized hh_rlhf
 bash isambard/jobs/winrate.sh llama3-8b ufb-rwgap20 ultrafeedback ultrafeedback-binarized   # filtered runs vs the DPO baselines
 bash isambard/jobs/winrate.sh llama3-8b ufb-rwgap20 hh_rlhf ultrafeedback-binarized
+# 5b) one CSV per run + mean±std per method (login node, seconds; also computes DPO-vs-SFT win-rates)
+python3 isambard/jobs/collect_results.py llama3-8b ultrafeedback-binarized ufb-rwgap20   # -> results_llama3-8b.csv, results_llama3-8b_summary.csv
 # 6) pairwise accuracy of the implicit reward on the test sets (human labels on HH; GPT-4 labels on UFB)
 sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,TEST=data/hh-rlhf/test.parquet,TAG=hh isambard/jobs/accuracy.sbatch
 sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,TEST=data/ultrafeedback-binarized/test.parquet,TAG=ufb isambard/jobs/accuracy.sbatch
