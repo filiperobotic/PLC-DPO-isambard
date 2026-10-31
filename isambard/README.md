@@ -57,4 +57,27 @@ python3 isambard/jobs/collect_results.py llama3-8b ultrafeedback-binarized ufb-r
 sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,TEST=data/hh-rlhf/test.parquet,TAG=hh isambard/jobs/accuracy.sbatch
 sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,TEST=data/ultrafeedback-binarized/test.parquet,TAG=ufb isambard/jobs/accuracy.sbatch
 ```
-Phase 2 = the same with DATA=hh-rlhf (160 k pairs; ~6-8 h per training job).
+## Phase 1b (UFB, after the first results) and Phase 2 (HH-RLHF)
+```bash
+# UFB test labels (GPT-4) for the implicit-reward accuracy — login node, dataset is already in the HF cache
+run_in_sif python isambard/implicit_reward.py ufb-test
+sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,TEST=data/ultrafeedback-binarized/test.parquet,TAG=ufb isambard/jobs/accuracy.sbatch
+sbatch --export=ALL,MODEL=llama3-8b,DATA=ufb-rwgap20,TEST=data/hh-rlhf/test.parquet,TAG=hh isambard/jobs/accuracy.sbatch
+sbatch --export=ALL,MODEL=llama3-8b,DATA=ufb-rwgap20,TEST=data/ultrafeedback-binarized/test.parquet,TAG=ufb isambard/jobs/accuracy.sbatch
+# PLC "as the paper ran it": 8 margins per std estimate (per_device_train_batch_size 8 x accumulation 8)
+for S in 42 43 44; do sbatch --export=ALL,MODEL=llama3-8b,DATA=ultrafeedback-binarized,METHOD=plc-dpo-aggressive-b8,SEED=$S isambard/jobs/train.sbatch; done
+# other filtering fractions from the SAME margins file (login node, seconds): natural zero (25 %) and 10 %
+for F in 0.25 0.10; do N=ufb-rwgap$(python3 -c "print(int($F*100))"); run_in_sif python isambard/implicit_reward.py filter \
+  --margins $OUT/ultrafeedback-binarized/rwgap/margins_llama3-8b.tsv --data-dir data/ultrafeedback-binarized --frac $F --name $N; done
+for D in ufb-rwgap25 ufb-rwgap10; do for S in 42 43 44; do sbatch --export=ALL,MODEL=llama3-8b,DATA=$D,METHOD=dpo,SEED=$S isambard/jobs/train.sbatch; done; done
+# filter + PLC-w64 (are the two gains additive?)
+for S in 42 43 44; do sbatch --export=ALL,MODEL=llama3-8b,DATA=ufb-rwgap20,METHOD=plc-dpo-aggressive-w64,SEED=$S isambard/jobs/train.sbatch; done
+# Phase 2 — HH-RLHF (160 k pairs, ~14 h per job): DPO + PLC-w64 first; rwgap needs the 3 DPO, then DPO on the filtered set
+for M in dpo plc-dpo-aggressive-w64; do for S in 42 43 44; do sbatch --export=ALL,MODEL=llama3-8b,DATA=hh-rlhf,METHOD=$M,SEED=$S isambard/jobs/train.sbatch; done; done
+sbatch --export=ALL,MODEL=llama3-8b,DATA=hh-rlhf,NAME=hh-rwgap20 isambard/jobs/rwgap.sbatch     # after the 3 HH DPO
+# evaluation / win-rates / CSV: same as steps 4-5b with the new DATA dirs, e.g.
+bash isambard/jobs/make_eval_grid.sh llama3-8b ultrafeedback-binarized ufb-rwgap20 ufb-rwgap25 ufb-rwgap10 hh-rlhf hh-rwgap20 > eval_grid.txt
+bash isambard/jobs/winrate.sh llama3-8b hh-rlhf ultrafeedback; bash isambard/jobs/winrate.sh llama3-8b hh-rwgap20 hh_rlhf hh-rlhf
+python3 isambard/jobs/collect_results.py llama3-8b ultrafeedback-binarized ufb-rwgap20 ufb-rwgap25 ufb-rwgap10
+python3 isambard/jobs/collect_results.py llama3-8b hh-rlhf hh-rwgap20 --baseline-data hh-rlhf --tag hh   # HH-trained runs vs HH DPO
+```

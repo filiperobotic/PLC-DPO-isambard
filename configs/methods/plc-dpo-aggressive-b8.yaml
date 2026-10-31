@@ -1,0 +1,19 @@
+method: plc-dpo
+plc_length_normalize: true
+plc_ema_alpha: 0.98
+plc_min_margin_std: 0.001
+plc_source_noise: 0.1
+plc_ambiguous_prior: 0.1
+plc_direction_temperature: 0.55
+plc_tie_temperature: 1.15
+plc_loss_temperature: 1.0
+plc_tie_margin: 0.0
+plc_warmup_ratio: 0.07
+plc_gamma_start: 0.0
+plc_gamma_end: 0.85
+plc_gamma_max: 0.85
+plc_confidence_power: 0.8
+plc_recipe: aggressive-b8
+# "as the paper ran it": the official std estimator (std of the gathered micro-batch) fed with 8 margins per step,
+# as on 8 GPUs x 1 pair — here 8 pairs per step on 1 GPU (accumulation auto = 8). If OOM, add gradient_checkpointing: true.
+per_device_train_batch_size: 8
