@@ -46,9 +46,16 @@ def main():
         raise SystemExit(f"use an empty output directory: {a.output}")
     stats = {}
     full = load_dataset("nvidia/HelpSteer2", data_dir="preference", split="train")   # one file; the 'split' column separates them
+    from collections import Counter
+    print("columns:", full.column_names, "| split values:", dict(Counter(full["split"])))
     for split, name in (("train", "train"), ("validation", "test")):
-        raw = [row for row in full if row["split"] == split]
+        want = {"train"} if split == "train" else {"validation", "val", "valid", "test"}
+        raw = [row for row in full if str(row["split"]).lower() in want]
+        if not raw:
+            raise SystemExit(f"no rows for split {split}; see the split values printed above")
         recs = [x for x in (pair(row, i, split) for i, row in enumerate(raw)) if x]
+        if not recs:
+            raise SystemExit(f"no pairs kept for {split}: first row = {raw[0]}")
         frame = pd.DataFrame(recs)
         a.output.mkdir(parents=True, exist_ok=True)
         frame.to_parquet(a.output / f"{name}.parquet", index=False)
