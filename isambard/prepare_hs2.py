@@ -45,8 +45,9 @@ def main():
     if a.output.exists() and any(a.output.iterdir()):
         raise SystemExit(f"use an empty output directory: {a.output}")
     stats = {}
+    full = load_dataset("nvidia/HelpSteer2", data_dir="preference", split="train")   # one file; the 'split' column separates them
     for split, name in (("train", "train"), ("validation", "test")):
-        raw = load_dataset("nvidia/HelpSteer2", data_dir="preference", split=split)
+        raw = [row for row in full if row["split"] == split]
         recs = [x for x in (pair(row, i, split) for i, row in enumerate(raw)) if x]
         frame = pd.DataFrame(recs)
         a.output.mkdir(parents=True, exist_ok=True)
