@@ -17,3 +17,4 @@ plc_recipe: aggressive-b8
 # "as the paper ran it": the official std estimator (std of the gathered micro-batch) fed with 8 margins per step,
 # as on 8 GPUs x 1 pair — here 8 pairs per step on 1 GPU (accumulation auto = 8). If OOM, add gradient_checkpointing: true.
 per_device_train_batch_size: 8
+gradient_checkpointing: true   # 16 sequências × 1024 tokens não cabem em 96 GB sem isto (OOM em 01/11)
