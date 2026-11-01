@@ -6,10 +6,11 @@
 set -euo pipefail
 cd ${REPO:-$HOME/PLC-DPO} && source isambard/env.sh >/dev/null
 MODEL=$1; shift
+EVALS=${EVALS:-"ultrafeedback helpsteer2"}   # override: EVALS="ultrafeedback hh_rlhf" bash ...
 for D in "$@"; do
   for R in $OUT/$D/$MODEL-*-s*/; do
     R=${R%/}; [ -f "$R/adapter_config.json" ] || continue
-    for E in ultrafeedback hh_rlhf; do [ -f "$R/eval/$E.scores.jsonl" ] || echo "$MODEL $R $E"; done
+    for E in $EVALS; do [ -f "$R/eval/$E.scores.jsonl" ] || echo "$MODEL $R $E"; done
   done
 done
-for E in ultrafeedback hh_rlhf; do [ -f "$OUT/sft-$MODEL/eval/$E.scores.jsonl" ] || echo "$MODEL sft $E"; done
+for E in $EVALS; do [ -f "$OUT/sft-$MODEL/eval/$E.scores.jsonl" ] || echo "$MODEL sft $E"; done

@@ -13,21 +13,24 @@ ufb-rwgap20 dpo
 ufb-rwgap20 plc-dpo-aggressive-w64
 ufb-rwgap25 dpo
 ufb-rwgap10 dpo
-hh-rlhf dpo
-hh-rlhf plc-dpo-aggressive-w64
-hh-rwgap20 dpo"
+ufb-rwgap5 dpo
+ufb-rwgap15 dpo
+helpsteer2 dpo
+helpsteer2 plc-dpo-aggressive-w64
+helpsteer2 plc-dpo-aggressive-b8"
+E1=${E1:-ultrafeedback}; E2=${E2:-helpsteer2}; T1=${T1:-ufb}; T2=${T2:-hs2}   # the two eval sets / accuracy tags shown
 ok() { [ -f "$1" ] && printf "✔" || printf "·"; }
-printf "%-26s %-26s %-5s  %-7s %-8s %-8s %-8s %-8s %-7s %-7s\n" DATA METHOD SEED adapter scor_UFB scor_HH wr_UFB wr_HH acc_HH acc_UFB
+printf "%-26s %-26s %-5s  %-7s %-8s %-8s %-8s %-8s %-7s %-7s\n" DATA METHOD SEED adapter scor_$T1 scor_$T2 wr_$T1 wr_$T2 acc_$T1 acc_$T2
 MISSING_TRAIN=(); MISSING_EVAL=(); MISSING_WR=(); MISSING_ACC=()
 while read -r D M; do
   [ -z "$D" ] && continue
   for S in 42 43 44; do
     R=$OUT/$D/$MODEL-$M-s$S; E=$R/eval
-    A=$(ok $R/adapter_config.json); SU=$(ok $E/ultrafeedback.scores.jsonl); SH=$(ok $E/hh_rlhf.scores.jsonl)
-    WU=$(ok $E/ultrafeedback.winrate_vs_dpo.json); WH=$(ok $E/hh_rlhf.winrate_vs_dpo.json)
+    A=$(ok $R/adapter_config.json); SU=$(ok $E/$E1.scores.jsonl); SH=$(ok $E/$E2.scores.jsonl)
+    WU=$(ok $E/$E1.winrate_vs_dpo.json); WH=$(ok $E/$E2.winrate_vs_dpo.json)
     AH="·"; AU="·"
-    [ -f $OUT/$D/accuracy_hh.json ]  && grep -q "\"$MODEL-$M-s$S\"" $OUT/$D/accuracy_hh.json  && AH="✔"
-    [ -f $OUT/$D/accuracy_ufb.json ] && grep -q "\"$MODEL-$M-s$S\"" $OUT/$D/accuracy_ufb.json && AU="✔"
+    [ -f $OUT/$D/accuracy_$T1.json ] && grep -q "\"$MODEL-$M-s$S\"" $OUT/$D/accuracy_$T1.json && AH="✔"
+    [ -f $OUT/$D/accuracy_$T2.json ] && grep -q "\"$MODEL-$M-s$S\"" $OUT/$D/accuracy_$T2.json && AU="✔"
     # the DPO baseline of a base dataset has no win-rate vs itself
     if [ "$M" = dpo ] && [[ "$D" != *rwgap* ]]; then WU="ref"; WH="ref"; fi
     printf "%-26s %-26s %-5s  %-7s %-8s %-8s %-8s %-8s %-7s %-7s\n" "$D" "$M" "$S" "$A" "$SU" "$SH" "$WU" "$WH" "$AH" "$AU"
@@ -37,9 +40,9 @@ while read -r D M; do
     [ "$AH" = "✔" ] && [ "$AU" = "✔" ] || MISSING_ACC+=("$D/$M/s$S")
   done
 done <<< "$GRID"
-echo; echo "SFT eval: UFB $(ok $OUT/sft-$MODEL/eval/ultrafeedback.scores.jsonl)  HH $(ok $OUT/sft-$MODEL/eval/hh_rlhf.scores.jsonl)"
-echo "datasets filtrados: $(for N in ufb-rwgap20 ufb-rwgap25 ufb-rwgap10 hh-rwgap20; do printf "%s=%s " $N $(ok data/$N/train.parquet); done)"
-echo "UFB test parquet (p/ acc_UFB): $(ok data/ultrafeedback-binarized/test.parquet)"
+echo; echo "SFT eval: $E1 $(ok $OUT/sft-$MODEL/eval/$E1.scores.jsonl)  $E2 $(ok $OUT/sft-$MODEL/eval/$E2.scores.jsonl)"
+echo "datasets: $(for N in helpsteer2 ufb-rwgap5 ufb-rwgap10 ufb-rwgap15 ufb-rwgap20 ufb-rwgap25; do printf "%s=%s " $N $(ok data/$N/train.parquet); done)"
+echo "test parquets: UFB $(ok data/ultrafeedback-binarized/test.parquet)  HS2 $(ok data/helpsteer2/test.parquet)  eval prompts HS2 $(ok data/eval/helpsteer2.jsonl)"
 echo
 echo "FALTA TREINAR  (${#MISSING_TRAIN[@]}): ${MISSING_TRAIN[*]:-nada}"
 echo "FALTA AVALIAR  (${#MISSING_EVAL[@]}): ${MISSING_EVAL[*]:-nada}      -> make_eval_grid.sh + eval_array.sbatch"

@@ -8,7 +8,8 @@ Needs $OUT (source isambard/env.sh) — done here if missing. Only the standard 
 import argparse, csv, glob, json, os, re, statistics as st, subprocess, sys
 from pathlib import Path
 
-EVALS = ("ultrafeedback", "hh_rlhf")
+EVALS = ("ultrafeedback", "helpsteer2")          # default eval sets; --evals overrides
+TAG = {"ultrafeedback": "ufb", "hh_rlhf": "hh", "helpsteer2": "hs2"}
 TRAIN_KEYS = ["rewards/margins", "rewards/accuracies", "plc/margin_std_ema", "plc/p_clean", "plc/p_flip", "plc/p_tie",
               "plc/confidence", "plc/mixture_weight"]
 
@@ -117,19 +118,20 @@ def main():
     ap.add_argument("model"); ap.add_argument("data", nargs="+")
     ap.add_argument("--baseline-data", default=None, help="where the DPO baselines live (default: first data dir)")
     ap.add_argument("--tag", default="", help="suffix for the csv names (e.g. hh)")
+    ap.add_argument("--evals", nargs="+", default=list(EVALS), help="eval prompt sets (ultrafeedback helpsteer2 hh_rlhf)")
     a = ap.parse_args()
-    OUT = out_dir(); repo = Path.cwd(); bdata = a.baseline_data or a.data[0]
+    OUT = out_dir(); repo = Path.cwd(); bdata = a.baseline_data or a.data[0]; evals = a.evals
     rows = []
     for data in a.data:
-        acc = {t: jload(OUT / data / f"accuracy_{t}.json") or {} for t in ("hh", "ufb")}
+        acc = {t: jload(OUT / data / f"accuracy_{t}.json") or {} for t in ("hh", "ufb", "hs2")}
         for run in sorted((OUT / data).glob(f"{a.model}-*-s*")):
             if not (run / "adapter_config.json").exists():
                 continue
             method, seed = run.name[len(a.model) + 1:].rsplit("-s", 1)
             r = {"braco": braco(data, method, bdata), "data": data, "method": method, "seed": int(seed), "run": run.name}
-            for ev in EVALS:
+            for ev in evals:
                 w = jload(run / "eval" / f"{ev}.winrate_vs_dpo.json")
-                tag = "ufb" if ev == "ultrafeedback" else "hh"
+                tag = TAG.get(ev, ev)
                 if w:
                     r[f"winrate_{tag}"] = round(w["win_rate"], 2)
                     r[f"wtl_{tag}"] = f"{w['wins']}/{w['ties']}/{w['losses']}"
@@ -139,14 +141,14 @@ def main():
                 g = gen_stats(run / "eval" / f"{ev}.pred.jsonl")
                 if "len" in g: r[f"len_{tag}"] = g["len"]
                 if "score" in g: r[f"score_{tag}"] = g["score"]
-            for t in ("hh", "ufb"):
+            for t in ("hh", "ufb", "hs2"):
                 if run.name in acc[t]:
                     r[f"acc_{t}"] = round(100 * acc[t][run.name], 2)
             r.update(train_metrics(run, repo))
             rows.append(r)
     # SFT vs DPO baselines
-    for ev in EVALS:
-        tag = "ufb" if ev == "ultrafeedback" else "hh"
+    for ev in evals:
+        tag = TAG.get(ev, ev)
         sft = OUT / f"sft-{a.model}" / "eval" / f"{ev}.scores.jsonl"
         if sft.exists():
             for b in sorted((OUT / bdata).glob(f"{a.model}-dpo-s*")):
@@ -159,7 +161,8 @@ def main():
                 if w:
                     rows.append({"data": bdata, "method": "dpo_vs_sft", "seed": int(b.name.rsplit("-s", 1)[-1]), "run": b.name,
                                  f"winrate_{tag}": round(w["win_rate"], 2), f"wtl_{tag}": f"{w['wins']}/{w['ties']}/{w['losses']}"})
-    cols = ["braco", "data", "method", "seed", "run", "winrate_ufb", "wtl_ufb", "winrate_hh", "wtl_hh", "acc_hh", "acc_ufb", "len_ufb", "len_hh", "score_ufb", "score_hh", "train_loss",
+    cols = ["braco", "data", "method", "seed", "run", "winrate_ufb", "wtl_ufb", "winrate_hs2", "wtl_hs2", "winrate_hh", "wtl_hh",
+            "acc_ufb", "acc_hs2", "acc_hh", "len_ufb", "len_hs2", "len_hh", "score_ufb", "score_hs2", "score_hh", "train_loss",
             "train_margins", "train_accuracies", "plc_margin_std_ema", "plc_p_clean", "plc_p_flip", "plc_p_tie", "plc_confidence",
             "plc_mixture_weight", "train_runtime_h", "scored_ufb", "scored_hh"]
     # merge dpo_vs_sft rows (same run) into one line per run
@@ -168,12 +171,12 @@ def main():
         key = (r["data"], r["method"].replace("dpo_vs_sft", "dpo"), r["seed"])
         tgt = merged.setdefault(key, {})
         if r["method"] == "dpo_vs_sft":
-            for tag in ("ufb", "hh"):
+            for tag in ("ufb", "hh", "hs2"):
                 if f"winrate_{tag}" in r:
                     tgt[f"dpo_vs_sft_{tag}"] = r[f"winrate_{tag}"]; tgt[f"dpo_vs_sft_wtl_{tag}"] = r[f"wtl_{tag}"]
         else:
             tgt.update(r)
-    cols += ["dpo_vs_sft_ufb", "dpo_vs_sft_wtl_ufb", "dpo_vs_sft_hh", "dpo_vs_sft_wtl_hh"]
+    cols += ["dpo_vs_sft_ufb", "dpo_vs_sft_wtl_ufb", "dpo_vs_sft_hs2", "dpo_vs_sft_wtl_hs2", "dpo_vs_sft_hh", "dpo_vs_sft_wtl_hh"]
     ordem = lambda r: (r["data"] != bdata, r["method"] != "dpo", r["data"], r["method"], r["seed"])  # baseline primeiro
     rows = sorted(merged.values(), key=ordem)
     f1 = f"results_{a.model}{'_'+a.tag if a.tag else ''}.csv"
@@ -181,7 +184,8 @@ def main():
         w = csv.DictWriter(fh, fieldnames=[PT.get(c, c) for c in cols]); w.writeheader()
         w.writerows([{PT.get(k, k): v for k, v in r.items() if k in cols} for r in rows])
     # summary: mean ± std per (data, method)
-    num = ["winrate_ufb", "winrate_hh", "acc_hh", "acc_ufb", "len_ufb", "len_hh", "score_ufb", "score_hh", "train_loss", "train_margins", "train_accuracies",
+    num = ["winrate_ufb", "winrate_hs2", "winrate_hh", "acc_ufb", "acc_hs2", "acc_hh", "len_ufb", "len_hs2", "len_hh",
+           "score_ufb", "score_hs2", "score_hh", "dpo_vs_sft_hs2", "train_loss", "train_margins", "train_accuracies",
            "plc_p_tie", "plc_confidence", "dpo_vs_sft_ufb", "dpo_vs_sft_hh"]
     groups = {}
     for r in rows:
@@ -202,8 +206,8 @@ def main():
         w.writerows([{hdr(k): v for k, v in r.items() if k in scols} for r in srows])
     print(f"{len(rows)} runs -> {f1}; {len(srows)} grupos -> {f2}")
     for s in srows:
-        print(f"  {s['braco']:40s} n={s['n_seeds']}  UFB {s.get('winrate_ufb_mean','-')}±{s.get('winrate_ufb_std','-')}"
-              f"  HH {s.get('winrate_hh_mean','-')}±{s.get('winrate_hh_std','-')}  acc_hh {s.get('acc_hh_mean','-')}  acc_ufb {s.get('acc_ufb_mean','-')}")
+        print(f"  {s['braco']:40s} n={s['n_seeds']}  " + "  ".join(f"{TAG.get(e,e)} {s.get('winrate_'+TAG.get(e,e)+'_mean','-')}±{s.get('winrate_'+TAG.get(e,e)+'_std','-')}" for e in evals)
+              + f"  acc_ufb {s.get('acc_ufb_mean','-')}  acc_hs2 {s.get('acc_hs2_mean','-')}")
 
 
 if __name__ == "__main__":

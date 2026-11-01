@@ -81,3 +81,33 @@ bash isambard/jobs/winrate.sh llama3-8b hh-rlhf ultrafeedback; bash isambard/job
 python3 isambard/jobs/collect_results.py llama3-8b ultrafeedback-binarized ufb-rwgap20 ufb-rwgap25 ufb-rwgap10
 python3 isambard/jobs/collect_results.py llama3-8b hh-rlhf hh-rwgap20 --baseline-data hh-rlhf --tag hh   # HH-trained runs vs HH DPO
 ```
+
+## Phase 3 — HelpSteer2 (human labels; same pairs/protocol as the RM track). HH-RLHF dropped (train AND eval) on 01/11.
+8 435 train pairs (ties kept, chosen = response_1), 132 steps at batch 64 -> ~45 min per 8B training. Eval prompt sets from now on:
+`ultrafeedback` (2 000) + `helpsteer2` (unique validation prompts). `make_eval_grid.sh`/`collect_results.py` default to these two.
+```bash
+# 0) data (login node, internet): train/test parquet + order csv + data/eval/helpsteer2.jsonl
+HF_HUB_OFFLINE=0 run_in_sif python isambard/prepare_hs2.py --output data/helpsteer2 && cat data/helpsteer2/manifest.json
+# 1) HS2-prompt evaluation of everything already trained on UFB (+ SFT): replaces the old HH column; ~10-15 min per task
+bash isambard/jobs/make_eval_grid.sh llama3-8b ultrafeedback-binarized ufb-rwgap5 ufb-rwgap10 ufb-rwgap15 ufb-rwgap20 ufb-rwgap25 > eval_grid.txt
+sbatch --array=0-$(( $(wc -l < eval_grid.txt) - 1 )) --export=ALL,GRID=eval_grid.txt isambard/jobs/eval_array.sbatch
+# 2) training on HS2: DPO, PLC-w64, PLC-b8 x 3 seeds (~45 min each)
+for M in dpo plc-dpo-aggressive-w64 plc-dpo-aggressive-b8; do for S in 42 43 44; do
+  sbatch --export=ALL,MODEL=llama3-8b,DATA=helpsteer2,METHOD=$M,SEED=$S isambard/jobs/train.sbatch; done; done
+# 3) after the 3 HS2 DPO: margins (one job) then the fraction curve from the same margins file (login node) + DPO on each
+sbatch --export=ALL,MODEL=llama3-8b,DATA=helpsteer2,NAME=hs2-rwgap20 isambard/jobs/rwgap.sbatch
+for F in 0.05 0.10 0.15 0.25 0.32; do N=hs2-rwgap$(python3 -c "print(int(round($F*100)))"); run_in_sif python isambard/implicit_reward.py filter \
+  --margins $OUT/helpsteer2/rwgap/margins_llama3-8b.tsv --data-dir data/helpsteer2 --frac $F --name $N; done
+for D in hs2-rwgap5 hs2-rwgap10 hs2-rwgap15 hs2-rwgap20 hs2-rwgap25 hs2-rwgap32; do for S in 42 43 44; do
+  sbatch --export=ALL,MODEL=llama3-8b,DATA=$D,METHOD=dpo,SEED=$S isambard/jobs/train.sbatch; done; done
+# 4) evaluation, win-rates (baseline = HS2 DPO), accuracy on HS2 validation (human) and UFB test (GPT-4), CSV
+bash isambard/jobs/make_eval_grid.sh llama3-8b helpsteer2 hs2-rwgap5 hs2-rwgap10 hs2-rwgap15 hs2-rwgap20 hs2-rwgap25 hs2-rwgap32 > eval_grid.txt
+sbatch --array=0-$(( $(wc -l < eval_grid.txt) - 1 )) --export=ALL,GRID=eval_grid.txt isambard/jobs/eval_array.sbatch
+for D in helpsteer2 hs2-rwgap5 hs2-rwgap10 hs2-rwgap15 hs2-rwgap20 hs2-rwgap25 hs2-rwgap32; do for E in ultrafeedback helpsteer2; do
+  bash isambard/jobs/winrate.sh llama3-8b $D $E helpsteer2; done
+  sbatch --export=ALL,MODEL=llama3-8b,DATA=$D,TEST=data/helpsteer2/test.parquet,TAG=hs2 isambard/jobs/accuracy.sbatch
+  sbatch --export=ALL,MODEL=llama3-8b,DATA=$D,TEST=data/ultrafeedback-binarized/test.parquet,TAG=ufb isambard/jobs/accuracy.sbatch; done
+python3 isambard/jobs/collect_results.py llama3-8b helpsteer2 hs2-rwgap5 hs2-rwgap10 hs2-rwgap15 hs2-rwgap20 hs2-rwgap25 hs2-rwgap32 --baseline-data helpsteer2 --tag hs2
+# UFB-trained table with the new HS2 column (+ accuracy on HS2 validation for the UFB groups: TAG=hs2 as above)
+python3 isambard/jobs/collect_results.py llama3-8b ultrafeedback-binarized ufb-rwgap5 ufb-rwgap10 ufb-rwgap15 ufb-rwgap20 ufb-rwgap25
+```
