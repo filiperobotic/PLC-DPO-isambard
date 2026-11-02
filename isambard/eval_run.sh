@@ -9,6 +9,10 @@ BASE=$(grep -m1 '^model_name_or_path:' configs/models/$MODEL.yaml | awk '{print 
 if [ "$RUN" = "sft" ]; then EVD=$OUT/sft-$MODEL/eval; ADAPT=""; else EVD=$RUN/eval; ADAPT="--adapter $RUN"; fi
 mkdir -p $EVD
 PRED=$EVD/$EVAL.pred.jsonl; SC=$EVD/$EVAL.scores.jsonl
+[ -f $SC ] && { echo "already scored: $SC"; exit 0; }
+LOCK=$EVD/$EVAL.lock
+mkdir "$LOCK" 2>/dev/null || { echo "another job holds $LOCK (started $(cat $LOCK/started 2>/dev/null)); skipping"; exit 0; }
+echo "$(date) job ${SLURM_JOB_ID:-?}" > $LOCK/started; trap 'rm -rf "$LOCK"' EXIT
 if [ ! -f $PRED ]; then
   if [ "$BACKEND" = "vllm" ]; then
     apptainer exec --nv -B $PROJECTDIR,$SCRATCHDIR,$HOME --env HF_HOME=$HF_HOME,HF_HUB_OFFLINE=1 $SIF_EVAL \
