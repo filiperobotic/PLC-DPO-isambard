@@ -13,10 +13,11 @@ set -euo pipefail
 cd ${REPO:-$HOME/PLC-DPO} && source isambard/env.sh
 export PYTHONPATH=$REPO/src
 : "${MODEL:?}" "${DATA:?}" "${METHOD:?}" "${SEED:=42}"
-RUN=$OUT/$DATA/$MODEL-$METHOD-s$SEED
+TAG=${EPOCHS:+-e$EPOCHS}                      # EPOCHS=3 -> run name <METHOD>-e3-s<SEED>, num_train_epochs=3 (default: 1 epoch, no tag)
+RUN=$OUT/$DATA/$MODEL-$METHOD$TAG-s$SEED
 if [ -f "$RUN/adapter_config.json" ]; then echo "already done: $RUN"; exit 0; fi
 rm -rf "$RUN"
 run_in_sif bash scripts/train.sh --config configs/train.yaml configs/models/$MODEL.yaml \
     configs/datasets/$DATA.yaml configs/methods/$METHOD.yaml \
-    --set output_dir=$RUN seed=$SEED attn_implementation=sdpa
+    --set output_dir=$RUN seed=$SEED attn_implementation=sdpa ${EPOCHS:+num_train_epochs=$EPOCHS}
 echo "done: $RUN"

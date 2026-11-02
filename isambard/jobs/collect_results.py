@@ -101,14 +101,16 @@ PT = {"braco": "braço", "data": "base de treino", "method": "método (config)",
       "dpo_vs_sft_wtl_hh": "DPO vs SFT v/e/d HH", "n_seeds": "nº seeds"}
 
 
-def braco(data, method, bdata):
-    nome = METODO.get(method, method)
+def braco(data, method, bdata, bmethod="dpo"):
+    base, ep = re.subn(r"-e(\d+)$", "", method), None
+    m_ep = re.search(r"-e(\d+)$", method)
+    nome = METODO.get(base[0], base[0]) + (f" ({m_ep.group(1)} épocas)" if m_ep else "")
     m = re.search(r"rwgap(\d+)", data)
     if m:
         nome = f"RwGap {m.group(1)}% -> {nome}"
     elif data != bdata:
         nome = f"{nome} [{data}]"
-    if method == "dpo" and data == bdata:
+    if method == bmethod and data == bdata:
         nome += " (referência = 50)"
     return nome
 
@@ -118,9 +120,11 @@ def main():
     ap.add_argument("model"); ap.add_argument("data", nargs="+")
     ap.add_argument("--baseline-data", default=None, help="where the DPO baselines live (default: first data dir)")
     ap.add_argument("--tag", default="", help="suffix for the csv names (e.g. hh)")
+    ap.add_argument("--baseline-method", default="dpo", help="run name of the baseline (dpo, or dpo-e3 for 3-epoch runs)")
+    ap.add_argument("--only-epochs", default=None, help="keep only runs with this epoch tag (e.g. 3); 1 = untagged runs")
     ap.add_argument("--evals", nargs="+", default=list(EVALS), help="eval prompt sets (ultrafeedback helpsteer2 hh_rlhf)")
     a = ap.parse_args()
-    OUT = out_dir(); repo = Path.cwd(); bdata = a.baseline_data or a.data[0]; evals = a.evals
+    OUT = out_dir(); repo = Path.cwd(); bdata = a.baseline_data or a.data[0]; evals = a.evals; bmethod = a.baseline_method
     rows = []
     for data in a.data:
         acc = {t: jload(OUT / data / f"accuracy_{t}.json") or {} for t in ("hh", "ufb", "hs2")}
@@ -128,14 +132,17 @@ def main():
             if not (run / "adapter_config.json").exists():
                 continue
             method, seed = run.name[len(a.model) + 1:].rsplit("-s", 1)
-            r = {"braco": braco(data, method, bdata), "data": data, "method": method, "seed": int(seed), "run": run.name}
+            ep = re.search(r"-e(\d+)$", method)
+            if a.only_epochs is not None and (ep.group(1) if ep else "1") != str(a.only_epochs):
+                continue
+            r = {"braco": braco(data, method, bdata, bmethod), "data": data, "method": method, "seed": int(seed), "run": run.name}
             for ev in evals:
                 w = jload(run / "eval" / f"{ev}.winrate_vs_dpo.json")
                 tag = TAG.get(ev, ev)
                 if w:
                     r[f"winrate_{tag}"] = round(w["win_rate"], 2)
                     r[f"wtl_{tag}"] = f"{w['wins']}/{w['ties']}/{w['losses']}"
-                elif method == "dpo" and data == bdata:
+                elif method == bmethod and data == bdata:
                     r[f"winrate_{tag}"] = 50.0; r[f"wtl_{tag}"] = "baseline"
                 r[f"scored_{tag}"] = (run / "eval" / f"{ev}.scores.jsonl").exists()
                 g = gen_stats(run / "eval" / f"{ev}.pred.jsonl")
@@ -151,7 +158,7 @@ def main():
         tag = TAG.get(ev, ev)
         sft = OUT / f"sft-{a.model}" / "eval" / f"{ev}.scores.jsonl"
         if sft.exists():
-            for b in sorted((OUT / bdata).glob(f"{a.model}-dpo-s*")):
+            for b in sorted((OUT / bdata).glob(f"{a.model}-{bmethod}-s*")):
                 w = jload(b / "eval" / f"{ev}.winrate_vs_sft.json") if (b / "eval" / f"{ev}.winrate_vs_sft.json").exists() else None
                 if w is None and (b / "eval" / f"{ev}.scores.jsonl").exists():
                     # DPO vs SFT: compare with the SFT scores as baseline (login node, seconds)
@@ -168,7 +175,7 @@ def main():
     # merge dpo_vs_sft rows (same run) into one line per run
     merged = {}
     for r in rows:
-        key = (r["data"], r["method"].replace("dpo_vs_sft", "dpo"), r["seed"])
+        key = (r["data"], r["method"].replace("dpo_vs_sft", bmethod), r["seed"])
         tgt = merged.setdefault(key, {})
         if r["method"] == "dpo_vs_sft":
             for tag in ("ufb", "hh", "hs2"):
@@ -177,7 +184,7 @@ def main():
         else:
             tgt.update(r)
     cols += ["dpo_vs_sft_ufb", "dpo_vs_sft_wtl_ufb", "dpo_vs_sft_hs2", "dpo_vs_sft_wtl_hs2", "dpo_vs_sft_hh", "dpo_vs_sft_wtl_hh"]
-    ordem = lambda r: (r["data"] != bdata, r["method"] != "dpo", r["data"], r["method"], r["seed"])  # baseline primeiro
+    ordem = lambda r: (r["data"] != bdata, r["method"] != bmethod, r["data"], r["method"], r["seed"])  # baseline primeiro
     rows = sorted(merged.values(), key=ordem)
     f1 = f"results_{a.model}{'_'+a.tag if a.tag else ''}.csv"
     with open(f1, "w", newline="") as fh:

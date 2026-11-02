@@ -5,9 +5,12 @@
 set -euo pipefail
 cd ${REPO:-$HOME/PLC-DPO} && source isambard/env.sh
 export PYTHONPATH=$REPO/src
-MODEL=$1; DATA=$2; EVAL=$3; BDATA=${4:-$2}
+MODEL=$1; DATA=$2; EVAL=$3; BDATA=${4:-$2}; BMETHOD=${5:-dpo}   # 5th arg: baseline method name, e.g. dpo-e3
 for R in $OUT/$DATA/$MODEL-*-s*/; do
-  R=${R%/}; S=${R##*-s}; T=$R/eval/$EVAL.scores.jsonl; B=$OUT/$BDATA/$MODEL-dpo-s$S/eval/$EVAL.scores.jsonl
+  R=${R%/}; S=${R##*-s}; T=$R/eval/$EVAL.scores.jsonl; B=$OUT/$BDATA/$MODEL-$BMETHOD-s$S/eval/$EVAL.scores.jsonl
+  # only compare runs with the same epoch tag as the baseline (dpo-e3 baseline <-> *-e3 runs; plain baseline <-> untagged runs)
+  ET=$(echo "$BMETHOD" | grep -o -- '-e[0-9]*$' || true); RT=$(basename $R | sed 's/-s[0-9]*$//' | grep -o -- '-e[0-9]*$' || true)
+  [ "$ET" = "$RT" ] || continue
   [ -f "$T" ] && [ -f "$B" ] || continue
   W=$R/eval/$EVAL.winrate_vs_dpo.json; rm -f $W
   run_in_sif bash scripts/evaluate.sh compare --baseline $B --input $T --output $W >/dev/null
