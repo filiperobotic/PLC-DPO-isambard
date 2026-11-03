@@ -17,7 +17,7 @@ TRAIN_KEYS = ["rewards/margins", "rewards/accuracies", "plc/margin_std_ema", "pl
 def out_dir():
     if os.environ.get("OUT"):
         return Path(os.environ["OUT"])
-    sh = subprocess.run(["bash", "-c", "source isambard/env.sh >/dev/null 2>&1; echo $OUT"], capture_output=True, text=True)
+    sh = subprocess.run(["bash", "-c", "source isambard/env.sh >/dev/null 2>&1; echo $OUT"], stdout=subprocess.PIPE, universal_newlines=True)  # py3.6 ok
     return Path(sh.stdout.strip())
 
 
