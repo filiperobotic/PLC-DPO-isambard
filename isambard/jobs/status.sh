@@ -17,7 +17,15 @@ ufb-rwgap5 dpo
 ufb-rwgap15 dpo
 helpsteer2 dpo
 helpsteer2 plc-dpo-aggressive-w64
-helpsteer2 plc-dpo-aggressive-b8"
+helpsteer2 plc-dpo-aggressive-b8
+hs2-rwgap5 dpo
+hs2-rwgap10 dpo
+hs2-rwgap15 dpo
+hs2-rwgap20 dpo
+hs2-rwgap25 dpo
+hs2-rwgap32 dpo
+helpsteer2 dpo-e3
+helpsteer2 dpo-e5"
 E1=${E1:-ultrafeedback}; E2=${E2:-helpsteer2}; T1=${T1:-ufb}; T2=${T2:-hs2}   # the two eval sets / accuracy tags shown
 ok() { [ -f "$1" ] && printf "✔" || printf "·"; }
 printf "%-26s %-26s %-5s  %-7s %-8s %-8s %-8s %-8s %-7s %-7s\n" DATA METHOD SEED adapter scor_$T1 scor_$T2 wr_$T1 wr_$T2 acc_$T1 acc_$T2
@@ -32,7 +40,7 @@ while read -r D M; do
     [ -f $OUT/$D/accuracy_$T1.json ] && grep -q "\"$MODEL-$M-s$S\"" $OUT/$D/accuracy_$T1.json && AH="✔"
     [ -f $OUT/$D/accuracy_$T2.json ] && grep -q "\"$MODEL-$M-s$S\"" $OUT/$D/accuracy_$T2.json && AU="✔"
     # the DPO baseline of a base dataset has no win-rate vs itself
-    if [ "$M" = dpo ] && [[ "$D" != *rwgap* ]]; then WU="ref"; WH="ref"; fi
+    if [[ "$M" = dpo* ]] && [[ "$D" != *rwgap* ]]; then WU="ref"; WH="ref"; fi   # dpo, dpo-e3, dpo-e5: baselines (only vs SFT)
     printf "%-26s %-26s %-5s  %-7s %-8s %-8s %-8s %-8s %-7s %-7s\n" "$D" "$M" "$S" "$A" "$SU" "$SH" "$WU" "$WH" "$AH" "$AU"
     [ "$A" = "✔" ] || { MISSING_TRAIN+=("$D/$M/s$S"); continue; }
     [ "$SU" = "✔" ] && [ "$SH" = "✔" ] || MISSING_EVAL+=("$D/$M/s$S")
